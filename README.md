@@ -61,7 +61,7 @@ Running from the command line:
        -e GITEA_RUNNER_REGISTRATION_TOKEN=<INSERT_TOKEN_HERE> \
        --name gitea_act_runner \
        --security-opt seccomp=unconfined \
-       --security-opt apparmor=unconfined \
+       --security-opt apparmor=rootlesskit \
        --security-opt systempaths=unconfined \
        vegardit/gitea-act-runner:dind-rootless-latest
    ```
@@ -124,7 +124,7 @@ Example `docker-compose.yml`:
        restart: always
        security_opt:
          - seccomp:unconfined
-         - apparmor:unconfined
+         - apparmor=rootlesskit
          - systempaths=unconfined
        volumes:
          - /my/path/to/data/dir:/data:rw # the config file is located at /data/.runner and needs to survive container restarts
@@ -250,6 +250,10 @@ Example deployment for Kubernetes:
   - It provides limited additional security at the pod boundary compared to rootful DinD, while still needing relaxed sandboxing.
   - It has practical limitations (user-mode networking via `slirp4netns`, port publishing quirks, performance trade-offs, storage driver constraints such as `fuse-overlayfs`).
   - If you need "rootless" semantics, consider using **native Kubernetes Jobs** (or a Kubernetes-native runner/executor) instead of running a Docker daemon inside the pod.
+
+If the host does not provide the `rootlesskit` AppArmor profile, use `apparmor=unconfined` instead.
+For Docker's highest-compatibility rootless DinD mode, add `--privileged` or `privileged: true`.
+This can fix host sandbox restrictions, but it makes the outer runner container privileged and should be treated as a security tradeoff.
 
 ### Additional environment variables
 

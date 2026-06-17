@@ -43,21 +43,30 @@ if [[ -f /usr/bin/dockerd-rootless.sh ]]; then
   log INFO "Starting Docker engine (rootless)..."
 
   # Detect whether this container allows RootlessKit to start.
-  # Rootless BuildKit/Rootless Docker need seccomp & apparmor unconfined
-  # (or --privileged) and often systempaths=unconfined for /proc masks.
-  # See: BuildKit rootless docs.  (seccomp/appamor/systempaths rationale)
+  # Rootless BuildKit/Rootless Docker need either the rootlesskit AppArmor
+  # profile or unconfined AppArmor. Seccomp must be unconfined, which is
+  # typically implied by --privileged. systempaths=unconfined may be needed for
+  # /proc masks.
   if [[ -r /proc/$$/status ]]; then
     seccomp=$(awk '/^Seccomp:/{print $2}' /proc/$$/status 2>/dev/null)
   fi
   if [[ -r /proc/$$/attr/current ]]; then
     apparmor=$(< /proc/$$/attr/current)
   fi
+  apparmor_ok=false
+  case "${apparmor:-}" in
+    unconfined|rootlesskit|rootlesskit\ *|rootlesskit//*)
+      apparmor_ok=true
+      ;;
+  esac
   # Seccomp: 0 == unconfined; 2 == filtered by default profile
-  if [[ "${seccomp:-}" != "0" || "${apparmor:-}" != "unconfined" ]]; then
+  if [[ "${seccomp:-}" != "0" || $apparmor_ok != "true" ]]; then
     log WARN "Rootless Docker/BuildKit may be blocked by container sandbox (seccomp=${seccomp:-unknown} apparmor=${apparmor:-unknown})."
-    log WARN "Run with: --security-opt seccomp=unconfined --security-opt apparmor=unconfined"
+    log WARN "Run with: --security-opt seccomp=unconfined --security-opt apparmor=rootlesskit"
+    log WARN "Fallback: --security-opt seccomp=unconfined --security-opt apparmor=unconfined"
+    log WARN "Last resort: --privileged --security-opt apparmor=rootlesskit"
     log WARN "Optionally add: --security-opt systempaths=unconfined (to relax /proc masking)."
-    log WARN "Compose: security_opt: ['seccomp:unconfined','apparmor:unconfined','systempaths=unconfined']"
+    log WARN "Compose: security_opt: ['seccomp:unconfined','apparmor=rootlesskit','systempaths=unconfined']"
   fi
 
   export DOCKER_HOST=unix://$HOME/.docker/run/docker.sock
