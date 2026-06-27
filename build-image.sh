@@ -18,8 +18,6 @@ gitea_runner_version=${GITEA_RUNNER_VERSION:-latest}
 image_repo=${DOCKER_IMAGE_REPO:-vegardit/gitea-act-runner}
 base_image=${DOCKER_BASE_IMAGE:-ubuntu:24.04}
 
-platforms="${DOCKER_PLATFORMS:-linux/amd64,linux/arm64/v8,linux/arm/v7}"
-
 declare -A image_meta=(
   [authors]="Vegard IT GmbH (vegardit.com)"
   [title]="$image_repo"
@@ -49,50 +47,11 @@ tags+=("${DOCKER_IMAGE_TAG_PREFIX:-}$gitea_runner_effective_version")
 
 
 #################################################
-# decide if multi-arch build
-#################################################
-if [[ ${DOCKER_PUSH:-} == "true" || ${DOCKER_PUSH_GHCR:-} == "true" || ${DOCKER_PUSH_SWR:-} == "true" ]]; then
-  build_multi_arch="true"
-fi
-
-
-#################################################
 # prepare docker
 #################################################
 run_step -- docker version
 
-# https://github.com/docker/buildx/#building-multi-platform-images
-run_step -- docker buildx version  # ensures buildx is enabled
-
 export DOCKER_BUILDKIT=1
-export DOCKER_CLI_EXPERIMENTAL=1 # prevents "docker: 'buildx' is not a docker command." in older Docker versions
-
-if [[ ${build_multi_arch:-} == "true" ]]; then
-  # Use a temporary local registry to work around Docker/Buildx/BuildKit quirks,
-  # enabling us to build/test multiarch images locally before pushing.
-  run_step -- start_docker_registry LOCAL_REGISTRY
-
-  # Register QEMU emulators so Docker can run and build multi-arch images
-  run_step "Install QEMU emulators" -- \
-    docker run --privileged --rm ghcr.io/dockerhub-mirror/tonistiigi__binfmt --install all
-fi
-
-# https://docs.docker.com/build/buildkit/configure/#resource-limiting
-echo "
-[worker.oci]
-  max-parallelism = 3
-" | sudo tee /etc/buildkitd.toml
-
-builder_name="bx-$(date +%s)-$RANDOM"
-run_step "buildx builder: configure" -- docker buildx create \
-  --name "$builder_name" \
-  --bootstrap \
-  --config /etc/buildkitd.toml \
-  --driver-opt network=host `# required for buildx to access the temporary registry` \
-  --driver docker-container \
-  --driver-opt image=ghcr.io/dockerhub-mirror/moby__buildkit:latest
-add_trap "docker buildx rm --force '$builder_name'" EXIT
-run_step "buildx builder: inspect" -- docker buildx inspect "$builder_name" --bootstrap
 
 
 #################################################
@@ -103,10 +62,8 @@ image_name=$image_repo:${tags[0]}
 # shellcheck disable=SC2154  # base_layer_cache_key is referenced but not assigned
 build_opts=(
   --file "image/Dockerfile"
-  --builder "$builder_name"
   --progress=plain
   --pull
-  # using the current date as value for BASE_LAYER_CACHE_KEY, i.e. the base layer cache (that holds system packages with security updates) will be invalidate once per day
   --build-arg BASE_LAYER_CACHE_KEY="$base_layer_cache_key"
   --build-arg BASE_IMAGE="$base_image"
   --build-arg GIT_BRANCH="${GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
@@ -118,18 +75,7 @@ build_opts=(
 
 for key in "${!image_meta[@]}"; do
   build_opts+=(--build-arg "OCI_${key}=${image_meta[$key]}")
-  if [[ ${build_multi_arch:-} == "true" ]]; then
-    build_opts+=(--annotation "index:org.opencontainers.image.${key}=${image_meta[$key]}")
-  fi
 done
-
-if [[ ${build_multi_arch:-} == "true" ]]; then
-  build_opts+=(--platform "$platforms")
-  build_opts+=(--output "type=registry,name=${LOCAL_REGISTRY}/${image_name},registry.http=true,registry.insecure=true")
-else
-  build_opts+=(--output "type=docker,load=true")
-  build_opts+=(--tag "$image_name")
-fi
 
 if [[ -n ${GITHUB_TOKEN:-} ]]; then
   build_opts+=(--secret "id=github_token,env=GITHUB_TOKEN")
@@ -140,24 +86,7 @@ if [[ $OSTYPE == "cygwin" || $OSTYPE == "msys" ]]; then
 fi
 
 run_step "Building docker image [$image_name]..." -- \
-  docker buildx build "${build_opts[@]}" "$project_root"
-
-
-#################################################
-# load image into local docker daemon for testing
-#################################################
-if [[ ${build_multi_arch:-} == "true" ]]; then
-  # cannot use "regctl image copy ... " which does not support loading into docker daemon https://github.com/regclient/regclient/issues/568
-  # cannot use "docker pull '$LOCAL_REGISTRY/$image_name'" which does not support ad-hoc pulling from unsecure registries - must be allowed in docker daemon config
-  run_step "Load image into local daemon for testing" -- \
-    docker run --rm \
-      -v /var/run/docker.sock:/var/run/docker.sock \
-      --network host `# required to access the temporary registry` \
-      quay.io/skopeo/stable:latest \
-      copy --src-tls-verify=false \
-           "docker://$LOCAL_REGISTRY/$image_name" \
-           "docker-daemon:$image_name"
-fi
+  docker build "${build_opts[@]}" -t "$image_name" "$project_root"
 
 
 #################################################
@@ -179,27 +108,17 @@ run_step "Testing docker image [$image_name]" -- \
 #################################################
 # push image
 #################################################
-function regctl() {
-  run_step "regctl ${*}" -- \
-    docker run --rm \
-    -u "$(id -u):$(id -g)" -e HOME -v "$HOME:$HOME" \
-    -v /etc/docker/certs.d:/etc/docker/certs.d:ro \
-    --network host `# required to access the temporary registry` \
-    ghcr.io/regclient/regctl:latest \
-    --host "reg=$LOCAL_REGISTRY,tls=disabled" \
-    --verbosity debug \
-    "${@}"
-}
-
 if [[ ${DOCKER_PUSH:-} == "true" ]]; then
   for tag in "${tags[@]}"; do
-    # cannot use "skopeo  copy ... " which does not support SBOMs https://github.com/containers/skopeo/issues/2393
-    regctl image copy --digest-tags --include-external --referrers "$LOCAL_REGISTRY/$image_name" "docker.io/$image_repo:$tag"
+    run_step "Tagging [$image_name] -> [$image_repo:$tag]" -- docker tag "$image_name" "$image_repo:$tag"
+    run_step "Pushing [docker.io/$image_repo:$tag]" -- docker push "$image_repo:$tag"
   done
 fi
 if [[ ${DOCKER_PUSH_GHCR:-} == "true" ]]; then
   for tag in "${tags[@]}"; do
-    regctl image copy --digest-tags --include-external --referrers "$LOCAL_REGISTRY/$image_name" "ghcr.io/$image_repo:$tag"
+    ghcr_image="ghcr.io/$image_repo:$tag"
+    run_step "Tagging [$image_name] -> [$ghcr_image]" -- docker tag "$image_name" "$ghcr_image"
+    run_step "Pushing [$ghcr_image]" -- docker push "$ghcr_image"
   done
 fi
 if [[ ${DOCKER_PUSH_SWR:-} == "true" ]]; then
@@ -207,6 +126,8 @@ if [[ ${DOCKER_PUSH_SWR:-} == "true" ]]; then
   swr_namespace=${DOCKER_SWR_NAMESPACE:-gsc-hub}
   swr_image_name="${image_repo##*/}"
   for tag in "${tags[@]}"; do
-    regctl image copy --digest-tags --include-external --referrers "$LOCAL_REGISTRY/$image_name" "$swr_registry/$swr_namespace/$swr_image_name:$tag"
+    swr_image="$swr_registry/$swr_namespace/$swr_image_name:$tag"
+    run_step "Tagging [$image_name] -> [$swr_image]" -- docker tag "$image_name" "$swr_image"
+    run_step "Pushing [$swr_image]" -- docker push "$swr_image"
   done
 fi
