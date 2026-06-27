@@ -34,6 +34,7 @@ function push_to_registry() {
   local target_prefix="$1"
   for tag in "${tags[@]}"; do
     local target="$target_prefix:$tag"
+    docker history "$target"
     run_step "Tagging [$image_name] -> [$target]" -- docker tag "$image_name" "$target"
     run_step "Pushing [$target]" -- docker push "$target"
   done
@@ -51,20 +52,6 @@ base_image=${DOCKER_BASE_IMAGE:-ubuntu:24.04}
 # resolve gitea act runner version (latest stable release)
 #################################################
 gitea_runner_effective_version=$(curl -sSf 'https://gitea.com/api/v1/repos/gitea/runner/releases?draft=false&pre-release=false&limit=1' | jq -r '.[0].tag_name | ltrimstr("v")')
-
-
-#################################################
-# declare image meta
-#################################################
-declare -A image_meta=(
-  [authors]="Vegard IT GmbH (vegardit.com)"
-  [title]="$image_repo"
-  [description]="Docker image based on $base_image to run Gitea's action runner as a Docker container"
-  [source]="$(git config --get remote.origin.url)"
-  [revision]="$(git rev-parse --short HEAD)"
-  [version]="$gitea_runner_effective_version"
-  [created]="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-)
 
 
 #################################################
@@ -94,14 +81,8 @@ build_opts=(
   --progress=plain
   --pull
   --build-arg BASE_IMAGE="$base_image"
-  --build-arg GIT_BRANCH="${GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
-  --build-arg GIT_COMMIT_DATE="$(date -d "@$(git log -1 --format='%at')" --utc +'%Y-%m-%d %H:%M:%S UTC')"
   --build-arg GITEA_RUNNER_VERSION="$gitea_runner_effective_version"
 )
-
-for key in "${!image_meta[@]}"; do
-  build_opts+=(--build-arg "OCI_${key}=${image_meta[$key]}")
-done
 
 if [[ $OSTYPE == "cygwin" || $OSTYPE == "msys" ]]; then
   project_root=$(cygpath -w "$project_root")

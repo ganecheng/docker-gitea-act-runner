@@ -160,42 +160,6 @@ ubuntu-20.04:docker://ghcr.io/catthehacker/ubuntu:act-20.04' \
   GITEA_RUNNER_REGISTRATION_TIMEOUT=30 \
   GITEA_RUNNER_REGISTRATION_RETRY_INTERVAL=5
 
-ARG OCI_authors
-ARG OCI_title
-ARG OCI_description
-ARG OCI_source
-ARG OCI_revision
-ARG OCI_version
-ARG OCI_created
-
-ARG GIT_BRANCH
-ARG GIT_COMMIT_DATE
-
-# https://github.com/opencontainers/image-spec/blob/main/annotations.md
-LABEL \
-  org.opencontainers.image.title="$OCI_title" \
-  org.opencontainers.image.description="$OCI_description" \
-  org.opencontainers.image.source="$OCI_source" \
-  org.opencontainers.image.revision="$OCI_revision" \
-  org.opencontainers.image.version="$OCI_version" \
-  org.opencontainers.image.created="$OCI_created"
-
-LABEL maintainer="$OCI_authors"
-
-RUN <<EOF
-  echo "#################################################"
-  echo "Writing build_info..."
-  echo "#################################################"
-  cat <<EOT >/opt/build_info
-GIT_REPO:    $OCI_source
-GIT_BRANCH:  $GIT_BRANCH
-GIT_COMMIT:  $OCI_revision @ $GIT_COMMIT_DATE
-IMAGE_BUILD: $OCI_created
-EOT
-  cat /opt/build_info
-
-EOF
-
 COPY image/*.sh /opt/
 COPY image/config.template.yaml /opt/
 

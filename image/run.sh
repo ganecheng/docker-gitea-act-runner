@@ -35,7 +35,6 @@ if [[ ${1:-} == "" ]]; then
   \_____|_|\__\___|\__,_| |_|  \_\__,_|_| |_|_| |_|\___|_|
 EOF
 
-  cat /opt/build_info
   echo
 
   log INFO "$(gitea-runner --version)"
