@@ -33,8 +33,8 @@ jobs:
       packages: write
 
     env:
+      TZ: Asia/Shanghai
       DOCKER_IMAGE_FLAVOR: dind
-      DOCKER_IMAGE_TAG_PREFIX: dind-
       GITEA_RUNNER_VERSION: latest
 
     steps:
@@ -54,7 +54,7 @@ jobs:
     #   run: docker login -u cn-southwest-2@$HUAWEICLOUD_IAM_AK -p $HUAWEICLOUD_IAM_SK swr.cn-southwest-2.myhuaweicloud.com
 
 
-    - name: Build ${{ env.DOCKER_REPO_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
+    - name: Build and Push
       env:
         DOCKER_BASE_IMAGE: ubuntu:24.04
         DOCKER_IMAGE_REPO: ${{ github.repository_owner }}/${{ env.DOCKER_REPO_NAME }}
@@ -68,4 +68,6 @@ jobs:
         if [[ -n "${{ inputs.VERSION }}" ]]; then
           export GITEA_RUNNER_VERSION="${{ inputs.VERSION }}"
         fi
+        export IMAGE_TAG="$(date +'%Y%m%d_%H%M%S')-x86_64"
+        echo "IMAGE_TAG=$IMAGE_TAG"
         bash build-image.sh

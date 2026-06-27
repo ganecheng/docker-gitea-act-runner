@@ -42,8 +42,12 @@ esac
 # define tags
 #################################################
 declare -a tags=()
-tags+=("${DOCKER_IMAGE_TAG_PREFIX:-}$gitea_runner_version")
-tags+=("${DOCKER_IMAGE_TAG_PREFIX:-}$gitea_runner_effective_version")
+if [[ -n ${IMAGE_TAG:-} ]]; then
+  tags+=("$IMAGE_TAG")
+else
+  tags+=("${DOCKER_IMAGE_TAG_PREFIX:-}$gitea_runner_version")
+  tags+=("${DOCKER_IMAGE_TAG_PREFIX:-}$gitea_runner_effective_version")
+fi
 
 
 #################################################
