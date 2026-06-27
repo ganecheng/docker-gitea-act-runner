@@ -56,7 +56,7 @@ jobs:
 
     - name: Build ${{ env.DOCKER_REPO_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
       env:
-        DOCKER_BASE_IMAGE: ghcr.io/dockerhub-mirror/ubuntu:24.04
+        DOCKER_BASE_IMAGE: ubuntu:24.04
         DOCKER_IMAGE_REPO: ${{ github.repository_owner }}/${{ env.DOCKER_REPO_NAME }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         DOCKER_PUSH_GHCR: "true"
