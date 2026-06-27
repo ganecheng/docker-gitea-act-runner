@@ -10,29 +10,19 @@
 # https://hub.docker.com/_/ubuntu/tags?name=24.04
 ARG BASE_IMAGE=ubuntu:24.04
 
-#############################################################
-# build final image
-#############################################################
-
-# https://github.com/hadolint/hadolint/wiki/DL3006 Always tag the version of an image explicitly
-# hadolint ignore=DL3006
-FROM ${BASE_IMAGE} as final
+FROM ${BASE_IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG LC_ALL=C
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 ARG GITEA_RUNNER_VERSION
 
-# https://github.com/hadolint/hadolint/wiki/DL3008 Pin versions
-# hadolint ignore=DL3008
-RUN --mount=type=secret,id=github_token,required=false <<EOF
+RUN <<EOF
   echo "#################################################"
   echo "Installing latest OS updates..."
   echo "#################################################"
   apt-get update
-  apt-get install --no-install-recommends -y apt-utils 2> >( grep -v 'debconf: delaying package configuration, since apt-utils is not installed' >&2 || true)
   apt-get upgrade -y
 
   function minimize() {
@@ -120,11 +110,6 @@ RUN --mount=type=secret,id=github_token,required=false <<EOF
   update-alternatives --set iptables /usr/sbin/iptables-legacy
   update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 
-  addgroup --system dockremap
-  adduser --system --ingroup dockremap dockremap
-  echo 'dockremap:165536:65536' | tee -a /etc/subuid
-  echo 'dockremap:165536:65536' | tee -a /etc/subgid
-
   docker_version=$(docker --version | cut -d ' ' -f3 | cut -d ',' -f1)
   dind_hack_url="https://raw.githubusercontent.com/moby/moby/v${docker_version}/hack/dind"
   if ! curl -o /dev/null -f -s "$dind_hack_url"; then
@@ -143,7 +128,7 @@ RUN --mount=type=secret,id=github_token,required=false <<EOF
   echo "#################################################"
   echo "Cleanup..."
   echo "#################################################"
-  apt-get remove -y binutils curl apt-utils
+  apt-get remove -y binutils curl
   apt-get clean autoclean
   apt-get autoremove --purge -y
   rm -rf /var/cache/{apt,debconf} \
@@ -170,8 +155,6 @@ ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-latest,\
 ubuntu-24.04:docker://ghcr.io/catthehacker/ubuntu:act-24.04,\
 ubuntu-22.04:docker://ghcr.io/catthehacker/ubuntu:act-22.04,\
 ubuntu-20.04:docker://ghcr.io/catthehacker/ubuntu:act-20.04' \
-  GITEA_RUNNER_UID=0 \
-  GITEA_RUNNER_GID=0 \
   #
   GITEA_RUNNER_EPHEMERAL=false \
   GITEA_RUNNER_REGISTRATION_TIMEOUT=30 \
@@ -218,7 +201,6 @@ COPY image/config.template.yaml /opt/
 
 VOLUME /data
 
-# Docker data volume - only used for dind mode (not dind-rootless which stores data in $HOME/.docker)
 VOLUME /var/lib/docker
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

@@ -51,7 +51,6 @@ fi
 #################################################################
 # start docker daemon
 #################################################################
-export DOCKER_MODE=dind
 log INFO "Starting Docker engine..."
 rm -f /var/run/docker.pid /run/docker/containerd/containerd.pid
 /usr/local/bin/dind-hack true

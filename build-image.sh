@@ -101,10 +101,6 @@ for key in "${!image_meta[@]}"; do
   build_opts+=(--build-arg "OCI_${key}=${image_meta[$key]}")
 done
 
-if [[ -n ${GITHUB_TOKEN:-} ]]; then
-  build_opts+=(--secret "id=github_token,env=GITHUB_TOKEN")
-fi
-
 if [[ $OSTYPE == "cygwin" || $OSTYPE == "msys" ]]; then
   project_root=$(cygpath -w "$project_root")
 fi
