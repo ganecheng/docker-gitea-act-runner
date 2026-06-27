@@ -73,7 +73,6 @@ build_opts=(
   --build-arg GIT_BRANCH="${GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
   --build-arg GIT_COMMIT_DATE="$(date -d "@$(git log -1 --format='%at')" --utc +'%Y-%m-%d %H:%M:%S UTC')"
   --build-arg GITEA_RUNNER_VERSION="$gitea_runner_effective_version"
-  --build-arg FLAVOR="$DOCKER_IMAGE_FLAVOR"
   --build-arg INSTALL_SUPPORT_TOOLS="${INSTALL_SUPPORT_TOOLS:-0}"
 )
 

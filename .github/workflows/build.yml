@@ -34,7 +34,6 @@ jobs:
 
     env:
       TZ: Asia/Shanghai
-      DOCKER_IMAGE_FLAVOR: dind
       GITEA_RUNNER_VERSION: latest
 
     steps:

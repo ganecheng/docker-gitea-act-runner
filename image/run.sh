@@ -36,79 +36,23 @@ fi
 
 
 #################################################################
-# start docker daemon (if installed = DinD)
+# start docker daemon
 #################################################################
-if [[ -f /usr/bin/dockerd-rootless.sh ]]; then
-  export DOCKER_MODE=dind-rootless
-  log INFO "Starting Docker engine (rootless)..."
-
-  # Detect whether this container allows RootlessKit to start.
-  # Rootless BuildKit/Rootless Docker need either the rootlesskit AppArmor
-  # profile or unconfined AppArmor. Seccomp must be unconfined, which is
-  # typically implied by --privileged. systempaths=unconfined may be needed for
-  # /proc masks.
-  if [[ -r /proc/$$/status ]]; then
-    seccomp=$(awk '/^Seccomp:/{print $2}' /proc/$$/status 2>/dev/null)
-  fi
-  if [[ -r /proc/$$/attr/current ]]; then
-    apparmor=$(< /proc/$$/attr/current)
-  fi
-  apparmor_ok=false
-  case "${apparmor:-}" in
-    unconfined|rootlesskit|rootlesskit\ *|rootlesskit//*)
-      apparmor_ok=true
-      ;;
-  esac
-  # Seccomp: 0 == unconfined; 2 == filtered by default profile
-  if [[ "${seccomp:-}" != "0" || $apparmor_ok != "true" ]]; then
-    log WARN "Rootless Docker/BuildKit may be blocked by container sandbox (seccomp=${seccomp:-unknown} apparmor=${apparmor:-unknown})."
-    log WARN "Run with: --security-opt seccomp=unconfined --security-opt apparmor=rootlesskit"
-    log WARN "Fallback: --security-opt seccomp=unconfined --security-opt apparmor=unconfined"
-    log WARN "Last resort: --privileged --security-opt apparmor=rootlesskit"
-    log WARN "Optionally add: --security-opt systempaths=unconfined (to relax /proc masking)."
-    log WARN "Compose: security_opt: ['seccomp:unconfined','apparmor=rootlesskit','systempaths=unconfined']"
-  fi
-
-  export DOCKER_HOST=unix://$HOME/.docker/run/docker.sock
-  if [[ ! -f "$HOME/.config/docker/daemon.json" ]]; then
-    # workaround for "Not using native diff for overlay2, this may cause degraded performance for building images: running in a user namespace  storage-driver=overlay2"
-    mkdir -p "$HOME/.config/docker"
-    echo '{"storage-driver":"fuse-overlayfs"}' > "$HOME/.config/docker/daemon.json"
-  fi
-
-  export container=docker # from dind-hack
-  export XDG_RUNTIME_DIR=$HOME/.docker/run
-  mkdir -p "$XDG_RUNTIME_DIR"
-  rm -f "$XDG_RUNTIME_DIR/docker.pid" "$XDG_RUNTIME_DIR/docker/containerd/containerd.pid"
-  /usr/bin/dockerd-rootless.sh -p "$HOME/.docker/run/docker.pid" > "$HOME/.docker/docker.log" 2>&1 &
-  export DOCKER_PID=$!
-  while ! docker stats --no-stream &>/dev/null; do
-    log INFO "Waiting for Docker engine to start..."
-    sleep 2
-    tail -n 1 "$HOME/.docker/docker.log"
-  done
-  echo "==========================================================="
-  docker info
-  echo "==========================================================="
-elif [[ -f /usr/bin/dockerd ]]; then
-  export DOCKER_MODE=dind
-  log INFO "Starting Docker engine..."
-  rm -f /var/run/docker.pid /run/docker/containerd/containerd.pid
-  /usr/local/bin/dind-hack true
-  service docker start
-  while ! docker stats --no-stream &>/dev/null; do
-    log INFO "Waiting for Docker engine to start..."
-    sleep 2
-    tail -n 1 /var/log/docker.log
-  done
-  # shellcheck disable=SC2155  # Declare and assign separately to avoid masking return values
-  export DOCKER_PID=$(</var/run/docker.pid)
-  echo "==========================================================="
-  docker info
-  echo "==========================================================="
-else
-  export DOCKER_MODE=dood
-fi
+export DOCKER_MODE=dind
+log INFO "Starting Docker engine..."
+rm -f /var/run/docker.pid /run/docker/containerd/containerd.pid
+/usr/local/bin/dind-hack true
+service docker start
+while ! docker stats --no-stream &>/dev/null; do
+  log INFO "Waiting for Docker engine to start..."
+  sleep 2
+  tail -n 1 /var/log/docker.log
+done
+# shellcheck disable=SC2155  # Declare and assign separately to avoid masking return values
+export DOCKER_PID=$(</var/run/docker.pid)
+echo "==========================================================="
+docker info
+echo "==========================================================="
 
 if [[ -z ${GITEA_RUNNER_JOB_CONTAINER_DOCKER_HOST:-} ]]; then
   export GITEA_RUNNER_JOB_CONTAINER_DOCKER_HOST=${DOCKER_HOST:-unix:///var/run/docker.sock}

@@ -28,8 +28,6 @@ ARG BASE_LAYER_CACHE_KEY
 
 ARG UPX_COMPRESS=false
 
-# dood|dind|dind-rootless
-ARG FLAVOR
 ARG GITEA_RUNNER_VERSION
 
 # https://github.com/hadolint/hadolint/wiki/DL3008 Pin versions
@@ -109,90 +107,71 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
   minimize /usr/local/bin/gitea-runner
   gitea-runner --version
 
-  if [[ $FLAVOR == dind* ]]; then
-    echo "#################################################"
-    echo "Installing docker engine..."
-    echo "#################################################"
-    # git needed by buildx
-    apt-get install --no-install-recommends -y git
-    # https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
-    apt-get install --no-install-recommends -y gnupg
-    install -m 0755 -d /etc/apt/keyrings
-    curl "https://download.docker.com/linux/ubuntu/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    chmod a+r /etc/apt/keyrings/docker.gpg
+  echo "#################################################"
+  echo "Installing docker engine..."
+  echo "#################################################"
+  # git needed by buildx
+  apt-get install --no-install-recommends -y git
+  # https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
+  apt-get install --no-install-recommends -y gnupg
+  install -m 0755 -d /etc/apt/keyrings
+  curl "https://download.docker.com/linux/ubuntu/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  chmod a+r /etc/apt/keyrings/docker.gpg
 
-    ARCH="$(dpkg --print-architecture)"
-    # shellcheck disable=SC1091 # Not following: File not included in mock
-    OS_CODENAME="$(source /etc/os-release && echo "$VERSION_CODENAME")"
-    echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $OS_CODENAME stable" > /etc/apt/sources.list.d/docker.list
-    apt-get update
-    (set -x; apt-get install --no-install-recommends -y docker-ce docker-buildx-plugin docker-compose-plugin containerd.io fuse-overlayfs)
-    apt-get remove -y gnupg
-    apt-get autoremove -y
+  ARCH="$(dpkg --print-architecture)"
+  # shellcheck disable=SC1091 # Not following: File not included in mock
+  OS_CODENAME="$(source /etc/os-release && echo "$VERSION_CODENAME")"
+  echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $OS_CODENAME stable" > /etc/apt/sources.list.d/docker.list
+  apt-get update
+  (set -x; apt-get install --no-install-recommends -y docker-ce docker-buildx-plugin docker-compose-plugin containerd.io fuse-overlayfs)
+  apt-get remove -y gnupg
+  apt-get autoremove -y
 
-    minimize \
-      /usr/bin/containerd* \
-      /usr/bin/ctr \
-      /usr/bin/docker* \
-      /usr/bin/runc \
-      /usr/libexec/docker/cli-plugins/*
+  minimize \
+    /usr/bin/containerd* \
+    /usr/bin/ctr \
+    /usr/bin/docker* \
+    /usr/bin/runc \
+    /usr/libexec/docker/cli-plugins/*
 
-    docker --version
-    docker compose version
-    docker buildx version
-    runc --version
+  docker --version
+  docker compose version
+  docker buildx version
+  runc --version
 
-    if [[ -f /etc/init.d/docker ]] && grep -q "ulimit -Hn" /etc/init.d/docker; then
-      # Fix for Docker 25.0.0+ ulimit issue in containers
-      # See: https://github.com/docker/for-linux/issues/1480
-      #      https://github.com/docker/cli/issues/4807
-      # Replace 'ulimit -Hn 524288' with 'ulimit -n 524288' to avoid hard limit errors
-      sed -i 's/ulimit -Hn/ulimit -n/g' /etc/init.d/docker
-    fi
+  if [[ -f /etc/init.d/docker ]] && grep -q "ulimit -Hn" /etc/init.d/docker; then
+    # Fix for Docker 25.0.0+ ulimit issue in containers
+    # See: https://github.com/docker/for-linux/issues/1480
+    #      https://github.com/docker/cli/issues/4807
+    # Replace 'ulimit -Hn 524288' with 'ulimit -n 524288' to avoid hard limit errors
+    sed -i 's/ulimit -Hn/ulimit -n/g' /etc/init.d/docker
+  fi
 
-    # https://github.com/docker/for-linux/issues/1437#issuecomment-1293818806
-    update-alternatives --set iptables /usr/sbin/iptables-legacy
-    update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+  # https://github.com/docker/for-linux/issues/1437#issuecomment-1293818806
+  update-alternatives --set iptables /usr/sbin/iptables-legacy
+  update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 
-    # set up subuid/subgid so that "--userns-remap=default" works out-of-the-box
-    addgroup --system dockremap
-    adduser --system --ingroup dockremap dockremap
-    echo 'dockremap:165536:65536' | tee -a /etc/subuid
-    echo 'dockremap:165536:65536' | tee -a /etc/subgid
+  # set up subuid/subgid so that "--userns-remap=default" works out-of-the-box
+  addgroup --system dockremap
+  adduser --system --ingroup dockremap dockremap
+  echo 'dockremap:165536:65536' | tee -a /etc/subuid
+  echo 'dockremap:165536:65536' | tee -a /etc/subgid
 
-    if [[ $FLAVOR == dind-rootless ]]; then
-      # https://docs.docker.com/engine/security/rootless/
-      (set -x; apt-get install --no-install-recommends -y \
-        dbus-user-session \
-        docker-ce-rootless-extras \
-        kmod \
-        iproute2 \
-        procps \
-        slirp4netns \
-        uidmap)
-
-      (set -x; rootlesskit --version)
-
-      # workaround "failed to load plugin io.containerd.internal.v1.opt  error="mkdir /opt/containerd: permission denied"
-      mkdir /opt/containerd
+  docker_version=$(docker --version | cut -d ' ' -f3 | cut -d ',' -f1)
+  dind_hack_url="https://raw.githubusercontent.com/moby/moby/v${docker_version}/hack/dind"
+  # Check if it exists; if not, try the new prefix (docker-vX.Y.Z)
+  if ! curl -o /dev/null -f -s "$dind_hack_url"; then
+    alt_url="https://raw.githubusercontent.com/moby/moby/docker-v${docker_version}/hack/dind"
+    if curl -o /dev/null -f -s "$alt_url"; then
+      dind_hack_url="$alt_url"
     else
-      docker_version=$(docker --version | cut -d ' ' -f3 | cut -d ',' -f1)
-      dind_hack_url="https://raw.githubusercontent.com/moby/moby/v${docker_version}/hack/dind"
-      # Check if it exists; if not, try the new prefix (docker-vX.Y.Z)
-      if ! curl -o /dev/null -f -s "$dind_hack_url"; then
-        alt_url="https://raw.githubusercontent.com/moby/moby/docker-v${docker_version}/hack/dind"
-        if curl -o /dev/null -f -s "$alt_url"; then
-          dind_hack_url="$alt_url"
-        else
-          echo "❌ Could not find dind hack script for Docker version ${docker_version}" >&2
-          exit 1
-        fi
-      fi
-      echo "Downloading [$dind_hack_url]..."
-      curl "$dind_hack_url" -o /usr/local/bin/dind-hack
-      chmod +x /usr/local/bin/dind-hack
+      echo "❌ Could not find dind hack script for Docker version ${docker_version}" >&2
+      exit 1
     fi
   fi
+  echo "Downloading [$dind_hack_url]..."
+  curl "$dind_hack_url" -o /usr/local/bin/dind-hack
+  chmod +x /usr/local/bin/dind-hack
 
   echo "#################################################"
   echo "Cleanup..."
