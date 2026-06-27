@@ -5,8 +5,22 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-ArtifactOfProjectHomePage: https://github.com/vegardit/docker-gitea-act-runner
 
-# shellcheck disable=SC1091  # Not following: /opt/bash-init.sh was not specified as input
-source /opt/bash-init.sh
+set -euo pipefail
+
+function log() {
+  local level=${1:-INFO}
+  level=${level^^}
+  shift
+  local prefix
+  prefix="$(date "+%Y-%m-%d %H:%M:%S") $level"
+  if (( $# )); then
+    printf '%s %s\n' "$prefix" "$*"
+  else
+    while IFS= read -r line; do
+      printf '%s %s\n' "$prefix" "$line"
+    done
+  fi
+}
 
 log INFO "Effective user: $(id)"
 
@@ -18,7 +32,6 @@ cd /data || exit 1
 #################################################
 if [[ -f "$INIT_SH_FILE" ]]; then
   log INFO "Loading [$INIT_SH_FILE]..."
-  # shellcheck disable=SC1090  # ShellCheck can't follow non-constant source
   source "$INIT_SH_FILE"
 fi
 
@@ -36,15 +49,15 @@ if [[ ${GITEA_RUNNER_LOG_EFFECTIVE_CONFIG:-false} == "true" ]]; then
   log INFO "Effective runner config [$effective_config_file]:"
   echo "==========================================================="
   while IFS= read -r line; do
-    line=${line//\"/\\\"} # escape double quotes
-    line=${line//\`/\\\`} # escape backticks
+    line=${line//\"/\\\"}
+    line=${line//\`/\\\`}
     eval "echo \"$line\"" | tee -a "$effective_config_file"
   done < "$GITEA_RUNNER_CONFIG_TEMPLATE_FILE"
   echo "==========================================================="
 else
   while IFS= read -r line; do
-    line=${line//\"/\\\"} # escape double quotes
-    line=${line//\`/\\\`} # escape backticks
+    line=${line//\"/\\\"}
+    line=${line//\`/\\\`}
     eval "echo \"$line\"" >> "$effective_config_file"
   done < "$GITEA_RUNNER_CONFIG_TEMPLATE_FILE"
 fi
@@ -94,7 +107,6 @@ fi
 #################################################
 # unset all variables named GITEA_... to prevent deprecation warning
 #################################################
-# shellcheck disable=SC2046  # Quote this to prevent word splitting
 unset $(env | grep "^GITEA_" | cut -d= -f1)
 
 
@@ -120,7 +132,6 @@ function shutdown_docker() {
 
 trap "shutdown_act; shutdown_docker" INT TERM HUP QUIT
 
-# monitoring docker engine/gitea-runner process status
 while [[ -e /proc/$DOCKER_PID && -e /proc/$gitea_runner_pid ]]; do
   sleep 1
 done
@@ -131,4 +142,4 @@ else
   log ERROR "Docker engine unexpectly ended."
   shutdown_act
 fi
-exit 1 # there is no scenario where the background processes should exit on their own
+exit 1

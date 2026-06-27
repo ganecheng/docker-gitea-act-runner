@@ -5,10 +5,34 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-ArtifactOfProjectHomePage: https://github.com/vegardit/docker-gitea-act-runner
 
-shared_lib="$(dirname "${BASH_SOURCE[0]}")/.shared"
-[[ -e $shared_lib ]] || curl -sSfL "https://raw.githubusercontent.com/vegardit/docker-shared/v1/download.sh?_=$(date +%s)" | bash -s v1 "$shared_lib" || exit 1
-# shellcheck disable=SC1091  # Not following: $shared_lib/lib/build-image-init.sh was not specified as input
-source "$shared_lib/lib/build-image-init.sh"
+set -euo pipefail
+
+project_root="$(readlink -e "$(dirname "${BASH_SOURCE[0]}")")"
+
+
+#################################################
+# helper functions
+#################################################
+function run_step() {
+  local title=""
+  if [[ ${1:-} == "--" ]]; then
+    shift
+  else
+    title="$1"
+    shift
+    if [[ ${1:-} == "--" ]]; then
+      shift
+    fi
+  fi
+  if [[ -n $title ]]; then
+    echo ""
+    echo "==========================================================="
+    echo "$title"
+    echo "==========================================================="
+  fi
+  echo "+ $*"
+  "$@"
+}
 
 
 #################################################
@@ -63,17 +87,14 @@ export DOCKER_BUILDKIT=1
 #################################################
 image_name=$image_repo:${tags[0]}
 
-# shellcheck disable=SC2154  # base_layer_cache_key is referenced but not assigned
 build_opts=(
   --file "image/Dockerfile"
   --progress=plain
   --pull
-  --build-arg BASE_LAYER_CACHE_KEY="$base_layer_cache_key"
   --build-arg BASE_IMAGE="$base_image"
   --build-arg GIT_BRANCH="${GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
   --build-arg GIT_COMMIT_DATE="$(date -d "@$(git log -1 --format='%at')" --utc +'%Y-%m-%d %H:%M:%S UTC')"
   --build-arg GITEA_RUNNER_VERSION="$gitea_runner_effective_version"
-  --build-arg INSTALL_SUPPORT_TOOLS="${INSTALL_SUPPORT_TOOLS:-0}"
 )
 
 for key in "${!image_meta[@]}"; do
@@ -90,15 +111,6 @@ fi
 
 run_step "Building docker image [$image_name]..." -- \
   docker build "${build_opts[@]}" -t "$image_name" "$project_root"
-
-
-#################################################
-# perform security audit
-#################################################
-if [[ ${DOCKER_AUDIT_IMAGE:-1} == "1" ]]; then
-  run_step "Auditing docker image [$image_name]" -- \
-    bash "$shared_lib/cmd/audit-image.sh" "$image_name"
-fi
 
 
 #################################################

@@ -6,7 +6,4 @@
 .gitattributes
 .gitignore
 .github/
-.shared/.*
-.shared/*.md
-.shared/*.txt
 image/Dockerfile

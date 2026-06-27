@@ -5,8 +5,22 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-ArtifactOfProjectHomePage: https://github.com/vegardit/docker-gitea-act-runner
 
-# shellcheck disable=SC1091  # Not following: /opt/bash-init.sh was not specified as input
-source /opt/bash-init.sh
+set -euo pipefail
+
+function log() {
+  local level=${1:-INFO}
+  level=${level^^}
+  shift
+  local prefix
+  prefix="$(date "+%Y-%m-%d %H:%M:%S") $level"
+  if (( $# )); then
+    printf '%s %s\n' "$prefix" "$*"
+  else
+    while IFS= read -r line; do
+      printf '%s %s\n' "$prefix" "$line"
+    done
+  fi
+}
 
 #################################################################
 # print header
@@ -30,7 +44,6 @@ EOF
   log INFO "IP Addresses: "
   awk '/32 host/ { if(uniq[ip]++ && ip != "127.0.0.1") print " - " ip } {ip=$2}' /proc/net/fib_trie
   log INFO "Config environment variables: "
-  # Redact secret-like variable names before printing startup diagnostics.
   env | grep '^GITEA_\|^ACT_' | sort | sed -E 's/^([^=]*(TOKEN|SECRET|PASSWORD)[^=]*=).*/\1******/I' | sed -e 's/^/ - /'
 fi
 
@@ -48,7 +61,6 @@ while ! docker stats --no-stream &>/dev/null; do
   sleep 2
   tail -n 1 /var/log/docker.log
 done
-# shellcheck disable=SC2155  # Declare and assign separately to avoid masking return values
 export DOCKER_PID=$(</var/run/docker.pid)
 echo "==========================================================="
 docker info

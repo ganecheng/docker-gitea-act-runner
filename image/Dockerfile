@@ -23,16 +23,17 @@ ARG LC_ALL=C
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
-ARG INSTALL_SUPPORT_TOOLS=0
-ARG BASE_LAYER_CACHE_KEY
-
 ARG GITEA_RUNNER_VERSION
 
 # https://github.com/hadolint/hadolint/wiki/DL3008 Pin versions
 # hadolint ignore=DL3008
-RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=.shared,target=/mnt/shared <<EOF
-  /mnt/shared/cmd/debian-install-os-updates.sh
-  /mnt/shared/cmd/debian-install-support-tools.sh
+RUN --mount=type=secret,id=github_token,required=false <<EOF
+  echo "#################################################"
+  echo "Installing latest OS updates..."
+  echo "#################################################"
+  apt-get update
+  apt-get install --no-install-recommends -y apt-utils 2> >( grep -v 'debconf: delaying package configuration, since apt-utils is not installed' >&2 || true)
+  apt-get upgrade -y
 
   function minimize() {
     ls -l "$@"
@@ -67,7 +68,6 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
   else
     gitea_runner_release_url="https://gitea.com/gitea/runner/releases/download/v${GITEA_RUNNER_VERSION}"
     gitea_runner_download_url="${gitea_runner_release_url}/gitea-runner-${GITEA_RUNNER_VERSION}-linux-${gitea_arch}"
-    # Release assets were renamed in 1.0.0; keep legacy overrides such as 0.6.1 buildable.
     gitea_runner_download_fallback_url="${gitea_runner_release_url}/act_runner-${GITEA_RUNNER_VERSION}-linux-${gitea_arch}"
   fi
   echo "Downloading [$gitea_runner_download_url]..."
@@ -94,7 +94,6 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
   chmod a+r /etc/apt/keyrings/docker.gpg
 
   ARCH="$(dpkg --print-architecture)"
-  # shellcheck disable=SC1091 # Not following: File not included in mock
   OS_CODENAME="$(source /etc/os-release && echo "$VERSION_CODENAME")"
   echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $OS_CODENAME stable" > /etc/apt/sources.list.d/docker.list
   apt-get update
@@ -115,18 +114,12 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
   runc --version
 
   if [[ -f /etc/init.d/docker ]] && grep -q "ulimit -Hn" /etc/init.d/docker; then
-    # Fix for Docker 25.0.0+ ulimit issue in containers
-    # See: https://github.com/docker/for-linux/issues/1480
-    #      https://github.com/docker/cli/issues/4807
-    # Replace 'ulimit -Hn 524288' with 'ulimit -n 524288' to avoid hard limit errors
     sed -i 's/ulimit -Hn/ulimit -n/g' /etc/init.d/docker
   fi
 
-  # https://github.com/docker/for-linux/issues/1437#issuecomment-1293818806
   update-alternatives --set iptables /usr/sbin/iptables-legacy
   update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 
-  # set up subuid/subgid so that "--userns-remap=default" works out-of-the-box
   addgroup --system dockremap
   adduser --system --ingroup dockremap dockremap
   echo 'dockremap:165536:65536' | tee -a /etc/subuid
@@ -134,7 +127,6 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
 
   docker_version=$(docker --version | cut -d ' ' -f3 | cut -d ',' -f1)
   dind_hack_url="https://raw.githubusercontent.com/moby/moby/v${docker_version}/hack/dind"
-  # Check if it exists; if not, try the new prefix (docker-vX.Y.Z)
   if ! curl -o /dev/null -f -s "$dind_hack_url"; then
     alt_url="https://raw.githubusercontent.com/moby/moby/docker-v${docker_version}/hack/dind"
     if curl -o /dev/null -f -s "$alt_url"; then
@@ -151,8 +143,13 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
   echo "#################################################"
   echo "Cleanup..."
   echo "#################################################"
-  apt-get remove -y binutils curl
-  /mnt/shared/cmd/debian-cleanup.sh
+  apt-get remove -y binutils curl apt-utils
+  apt-get clean autoclean
+  apt-get autoremove --purge -y
+  rm -rf /var/cache/{apt,debconf} \
+     /var/lib/apt/lists/* \
+     /var/log/{apt,alternatives.log,bootstrap.log,dpkg.log} \
+     /tmp/* /var/tmp/*
 
 EOF
 
@@ -218,7 +215,6 @@ EOF
 
 COPY image/*.sh /opt/
 COPY image/config.template.yaml /opt/
-COPY .shared/lib/bash-init.sh /opt/bash-init.sh
 
 VOLUME /data
 
