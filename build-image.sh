@@ -18,7 +18,7 @@ gitea_runner_version=${GITEA_RUNNER_VERSION:-latest}
 image_repo=${DOCKER_IMAGE_REPO:-vegardit/gitea-act-runner}
 base_image=${DOCKER_BASE_IMAGE:-ubuntu:24.04}
 
-platforms="linux/amd64,linux/arm64/v8,linux/arm/v7"
+platforms="${DOCKER_PLATFORMS:-linux/amd64,linux/arm64/v8,linux/arm/v7}"
 
 declare -A image_meta=(
   [authors]="Vegard IT GmbH (vegardit.com)"
@@ -51,7 +51,7 @@ tags+=("${DOCKER_IMAGE_TAG_PREFIX:-}$gitea_runner_effective_version")
 #################################################
 # decide if multi-arch build
 #################################################
-if [[ ${DOCKER_PUSH:-} == "true" || ${DOCKER_PUSH_GHCR:-} == "true" ]]; then
+if [[ ${DOCKER_PUSH:-} == "true" || ${DOCKER_PUSH_GHCR:-} == "true" || ${DOCKER_PUSH_SWR:-} == "true" ]]; then
   build_multi_arch="true"
 fi
 
@@ -201,5 +201,13 @@ fi
 if [[ ${DOCKER_PUSH_GHCR:-} == "true" ]]; then
   for tag in "${tags[@]}"; do
     regctl image copy --digest-tags --include-external --referrers "$LOCAL_REGISTRY/$image_name" "ghcr.io/$image_repo:$tag"
+  done
+fi
+if [[ ${DOCKER_PUSH_SWR:-} == "true" ]]; then
+  swr_registry=${DOCKER_SWR_REGISTRY:-swr.cn-southwest-2.myhuaweicloud.com}
+  swr_namespace=${DOCKER_SWR_NAMESPACE:-gsc-hub}
+  swr_image_name="${image_repo##*/}"
+  for tag in "${tags[@]}"; do
+    regctl image copy --digest-tags --include-external --referrers "$LOCAL_REGISTRY/$image_name" "$swr_registry/$swr_namespace/$swr_image_name:$tag"
   done
 fi

@@ -1,14 +1,7 @@
-# SPDX-FileCopyrightText: © Vegard IT GmbH (https://vegardit.com)
-# SPDX-FileContributor: Sebastian Thomschke
-# SPDX-License-Identifier: Apache-2.0
-# SPDX-ArtifactOfProjectHomePage: https://github.com/vegardit/docker-gitea-act-runner
-#
-# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 name: Build
 
-on:  # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+on:
   workflow_dispatch:
-    # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch
     inputs:
       VERSION:
         type: string
@@ -23,19 +16,17 @@ defaults:
 
 env:
   DOCKER_REPO_NAME: gitea-act-runner
-  DOCKER_AUDIT_IMAGE: 0
-  TRIVY_CACHE_DIR: ~/.trivy/cache
+  HUAWEICLOUD_IAM_AK: "${{ secrets.HUAWEICLOUD_IAM_AK }}"
+  HUAWEICLOUD_IAM_SK: "${{ secrets.HUAWEICLOUD_IAM_SK }}"
 
 
-permissions:  # added using https://github.com/step-security/secure-repo
+permissions:
   contents: read
 
 jobs:
 
-  ###########################################################
   build:
-  ###########################################################
-    runs-on: ubuntu-latest  # https://github.com/actions/runner-images#available-images
+    runs-on: ubuntu-latest
     timeout-minutes: 45
 
     permissions:
@@ -47,88 +38,11 @@ jobs:
       GITEA_RUNNER_VERSION: latest
 
     steps:
-    - name: Harden the runner (Audit all outbound calls)
-      uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-      with:
-        egress-policy: audit
-
-    - name: "Show: GitHub context"
-      env:
-        GITHUB_CONTEXT: ${{ toJSON(github) }}
-      run: printf '%s' "$GITHUB_CONTEXT" | python -m json.tool
-
-
-    - name: "Show: environment variables"
-      run: env | sort
-
-
-    - name: "Show: Bash version"
-      run: bash --version
-
-
     - name: Git Checkout
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
 
-    - name: Run the sh-checker
-      uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744 # master
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        SHFMT_OPTS: --simplify --keep-padding
-      with:
-         sh_checker_comment: true
-         sh_checker_checkbashisms_enable: true
-         sh_checker_shfmt_disable: true
-
-
-    - name: Check Dockerfile
-      uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
-      with:
-        dockerfile: image/Dockerfile
-
-
-    - name: Cache trivy cache
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-      with:
-        path: ${{ env.TRIVY_CACHE_DIR }}
-        # https://github.com/actions/cache/issues/342#issuecomment-673371329
-        key: ${{ runner.os }}-trivy-${{ github.run_id }}
-        restore-keys: |
-          ${{ runner.os }}-trivy-
-
-
-    - name: Configure fast APT repository mirror
-      uses: vegardit/fast-apt-mirror.sh@806c59276adfff2df420124ad5e4587f018c358a # v1
-
-
-    - name: Install dos2unix
-      run: sudo apt-get install --no-install-recommends -y dos2unix
-
-
-    - name: "Determine if docker images shall be published"
-      id: docker_push_actions
-      run: |
-        # ACT -> https://nektosact.com/usage/index.html#skipping-steps
-        set -x
-        if [[ $GITHUB_REF_NAME == 'main' && $GITHUB_EVENT_NAME != 'pull_request' && -z "$ACT" ]]; then
-          echo "DOCKER_PUSH_GHCR=true" >> "$GITHUB_ENV"
-          echo "DOCKER_PUSH_GHCR=true" >> $GITHUB_OUTPUT
-          if [[ -n "${{ secrets.DOCKER_HUB_USERNAME }}" ]]; then
-            echo "DOCKER_PUSH=true" >> "$GITHUB_ENV"
-          fi
-        fi
-
-
-    - name: Login to docker.io
-      if: ${{ env.DOCKER_PUSH }}
-      uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
-      with:
-        username: ${{ secrets.DOCKER_HUB_USERNAME }}
-        password: ${{ secrets.DOCKER_HUB_TOKEN }}
-
-
     - name: Login to ghcr.io
-      if: ${{ env.DOCKER_PUSH_GHCR }}
       uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
       with:
         registry: ghcr.io
@@ -136,50 +50,23 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
 
+    - name: Login to SWR
+      run: docker login -u cn-southwest-2@$HUAWEICLOUD_IAM_AK -p $HUAWEICLOUD_IAM_SK swr.cn-southwest-2.myhuaweicloud.com
+
+
     - name: Build ${{ env.DOCKER_REPO_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
       env:
         DOCKER_BASE_IMAGE: ghcr.io/dockerhub-mirror/ubuntu:24.04
         DOCKER_IMAGE_REPO: ${{ github.repository_owner }}/${{ env.DOCKER_REPO_NAME }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        TRIVY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        DOCKER_PUSH_GHCR: "true"
+        DOCKER_PUSH_SWR: "true"
+        DOCKER_SWR_REGISTRY: swr.cn-southwest-2.myhuaweicloud.com
+        DOCKER_SWR_NAMESPACE: gsc-hub
+        DOCKER_PLATFORMS: linux/amd64
       run: |
         set -eu
         if [[ -n "${{ inputs.VERSION }}" ]]; then
           export GITEA_RUNNER_VERSION="${{ inputs.VERSION }}"
         fi
         bash build-image.sh
-
-    outputs:
-      DOCKER_PUSH_GHCR: ${{ steps.docker_push_actions.outputs.DOCKER_PUSH_GHCR }}
-
-
-  ###########################################################
-  delete-untagged-images:
-  ###########################################################
-    runs-on: ubuntu-latest  # https://github.com/actions/runner-images#available-images
-    timeout-minutes: 5
-    needs: [build]
-    if: ${{ needs.build.outputs.DOCKER_PUSH_GHCR }}
-
-    concurrency:
-      group: ${{ github.workflow }}
-      cancel-in-progress: false
-
-    permissions:
-      packages: write
-
-    steps:
-    - name: Harden the runner (Audit all outbound calls)
-      uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-      with:
-        egress-policy: audit
-
-    - name: Delete untagged images
-      uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
-      with:
-        package: ${{ env.DOCKER_REPO_NAME }}
-        delete-untagged: true
-        delete-partial-images: true
-        delete-ghost-images: true
-        delete-orphaned-images: true
-        validate: true
