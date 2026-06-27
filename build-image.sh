@@ -127,7 +127,7 @@ if [[ ${DOCKER_PUSH_GHCR:-} == "true" ]]; then
   push_to_registry "ghcr.io/$image_repo"
 fi
 if [[ ${DOCKER_PUSH_SWR:-} == "true" ]]; then
-  swr_registry=${DOCKER_SWR_REGISTRY:-swr.cn-south-west-2.myhuaweicloud.com}
+  swr_registry=${DOCKER_SWR_REGISTRY:-swr.cn-southwest-2.myhuaweicloud.com}
   swr_namespace=${DOCKER_SWR_NAMESPACE:-gsc-hub}
   swr_image_name="${image_repo##*/}"
   push_to_registry "$swr_registry/$swr_namespace/$swr_image_name"
