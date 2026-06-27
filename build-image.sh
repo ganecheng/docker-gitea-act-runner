@@ -7,45 +7,19 @@
 
 set -euo pipefail
 
-project_root="$(readlink -e "$(dirname "${BASH_SOURCE[0]}")")"
-
 
 #################################################
 # helper functions
 #################################################
-function run_step() {
-  local title=""
-  while [[ ${1:-} != "--" ]]; do
-    title="$1"
-    shift
-  done
-  shift  # remove "--"
-  if [[ -n $title ]]; then
-    echo ""
-    echo "==========================================================="
-    echo "$title"
-    echo "==========================================================="
-  fi
-  echo "+ $*"
-  "$@"
-}
-
 function push_to_registry() {
-  local target_prefix="$1"
-  for tag in "${tags[@]}"; do
-    local target="$target_prefix:$tag"
-    docker history "$image_name"
-    run_step "Tagging [$image_name] -> [$target]" -- docker tag "$image_name" "$target"
-    run_step "Pushing [$target]" -- docker push "$target"
-  done
+  local target="$1:$IMAGE_TAG"
+  docker images
+  docker history "$image_name"
+  echo "Tagging [$image_name] -> [$target]"
+  docker tag "$image_name" "$target"
+  echo "Pushing [$target]"
+  docker push "$target"
 }
-
-
-#################################################
-# configuration
-#################################################
-image_repo=${DOCKER_IMAGE_REPO:-vegardit/gitea-act-runner}
-base_image=${DOCKER_BASE_IMAGE:-ubuntu:24.04}
 
 
 #################################################
@@ -55,61 +29,41 @@ gitea_runner_effective_version=$(curl -sSf 'https://gitea.com/api/v1/repos/gitea
 
 
 #################################################
-# define tags
-#################################################
-declare -a tags=()
-if [[ -n ${IMAGE_TAG:-} ]]; then
-  tags+=("$IMAGE_TAG")
-else
-  tags+=("${DOCKER_IMAGE_TAG_PREFIX:-}$gitea_runner_effective_version")
-fi
-
-
-#################################################
-# prepare docker
-#################################################
-run_step -- docker version
-
-
-#################################################
 # build the image
 #################################################
-image_name=$image_repo:${tags[0]}
+image_name=$DOCKER_IMAGE_REPO:$IMAGE_TAG
 
 build_opts=(
   --file "image/Dockerfile"
   --progress=plain
   --pull
-  --build-arg BASE_IMAGE="$base_image"
+  --build-arg BASE_IMAGE="$DOCKER_BASE_IMAGE"
   --build-arg GITEA_RUNNER_VERSION="$gitea_runner_effective_version"
 )
 
-if [[ $OSTYPE == "cygwin" || $OSTYPE == "msys" ]]; then
-  project_root=$(cygpath -w "$project_root")
-fi
-
-run_step "Building docker image [$image_name]..." -- \
-  docker build "${build_opts[@]}" -t "$image_name" "$project_root"
+echo "Building docker image [$image_name]..."
+docker build "${build_opts[@]}" -t "$image_name" .
 
 
 #################################################
 # test image
 #################################################
-run_step "Testing docker image [$image_name]" -- \
-  docker run --pull=never --rm "$image_name" gitea-runner --version
+echo "Testing docker image [$image_name]..."
+docker run --pull=never --rm "$image_name" gitea-runner --version
 
-run_step "Listing docker images" -- docker images
+echo "Listing docker images..."
+docker images
 
 
 #################################################
 # push image
 #################################################
 if [[ ${DOCKER_PUSH_GHCR:-} == "true" ]]; then
-  push_to_registry "ghcr.io/$image_repo"
+  push_to_registry "ghcr.io/$DOCKER_IMAGE_REPO"
 fi
 if [[ ${DOCKER_PUSH_SWR:-} == "true" ]]; then
   swr_registry=${DOCKER_SWR_REGISTRY:-swr.cn-southwest-2.myhuaweicloud.com}
   swr_namespace=${DOCKER_SWR_NAMESPACE:-gsc-hub}
-  swr_image_name="${image_repo##*/}"
+  swr_image_name="${DOCKER_IMAGE_REPO##*/}"
   push_to_registry "$swr_registry/$swr_namespace/$swr_image_name"
 fi
