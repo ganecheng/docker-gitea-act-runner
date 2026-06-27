@@ -93,9 +93,9 @@ if [[ -f /usr/bin/dockerd-rootless.sh ]]; then
 elif [[ -f /usr/bin/dockerd ]]; then
   export DOCKER_MODE=dind
   log INFO "Starting Docker engine..."
-  sudo rm -f /var/run/docker.pid /run/docker/containerd/containerd.pid
-  sudo /usr/local/bin/dind-hack true
-  sudo service docker start
+  rm -f /var/run/docker.pid /run/docker/containerd/containerd.pid
+  /usr/local/bin/dind-hack true
+  service docker start
   while ! docker stats --no-stream &>/dev/null; do
     log INFO "Waiting for Docker engine to start..."
     sleep 2
@@ -114,54 +114,4 @@ if [[ -z ${GITEA_RUNNER_JOB_CONTAINER_DOCKER_HOST:-} ]]; then
   export GITEA_RUNNER_JOB_CONTAINER_DOCKER_HOST=${DOCKER_HOST:-unix:///var/run/docker.sock}
 fi
 
-
-#################################################################
-# check if act user UID/GID needs adjustment
-#################################################################
-fix_permissions=false
-if [[ -n ${GITEA_RUNNER_UID:-} ]]; then
-  effective_uid=$(id -u act)
-  if [[ $GITEA_RUNNER_UID != "$effective_uid" ]]; then
-    fix_permissions=true
-  fi
-fi
-
-if [[ -n ${GITEA_RUNNER_GID:-} ]]; then
-  effective_gid=$(id -g act)
-  if [[ $GITEA_RUNNER_GID != "$effective_gid" ]]; then
-    fix_permissions=true
-  fi
-fi
-
-
-#################################################################
-# check if act user has read/write access to docker socket in GITEA_RUNNER_JOB_CONTAINER_DOCKER_HOST
-#################################################################
-if [[ $DOCKER_MODE != "dind-rootless" ]]; then
-  if [[ $GITEA_RUNNER_JOB_CONTAINER_DOCKER_HOST == unix://* ]]; then
-    docker_sock=${GITEA_RUNNER_JOB_CONTAINER_DOCKER_HOST#unix://}
-    if [[ ! -w $docker_sock || ! -r $docker_sock ]]; then
-      docker_group=$(stat -c '%G' "$docker_sock")
-      if [[ $docker_group == "UNKNOWN" ]]; then
-        docker_gid=$(stat -c '%g' "$docker_sock")
-        docker_group="docker$docker_gid"
-        fix_permissions=true
-      fi
-
-      if ! id -nG act | grep -qw "$docker_group"; then
-        fix_permissions=true
-      fi
-    fi
-  fi
-fi
-
-
-#################################################################
-# adjust act user UID/GID if required
-#################################################################
-if [[ $fix_permissions == "true" ]]; then
-  log INFO "Fixing permissions..."
-  exec sudo -E bash /opt/fix_permissions.sh
-else
-  exec bash /opt/run_runner.sh
-fi
+exec bash /opt/run_runner.sh

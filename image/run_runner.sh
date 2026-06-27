@@ -116,7 +116,7 @@ case $DOCKER_MODE in
       if [[ $DOCKER_MODE == "dind-rootless" ]]; then
         (set -x; kill -SIGTERM "$DOCKER_PID")
       else
-        (set -x; sudo service docker stop)
+        (set -x; service docker stop)
       fi
       while [[ -e /proc/$DOCKER_PID ]]; do
         log INFO "Waiting for docker engine to shutdown..."

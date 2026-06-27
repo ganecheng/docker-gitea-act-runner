@@ -109,15 +109,6 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
   minimize /usr/local/bin/gitea-runner
   gitea-runner --version
 
-  echo "#################################################"
-  echo "Adding [act] user..."
-  echo "#################################################"
-  addgroup --gid 1000 act
-  adduser --uid 1000 --ingroup act --home /data --shell /bin/bash --disabled-password --gecos "" act
-  adduser act users
-  adduser act sudo
-  echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-
   if [[ $FLAVOR == dind* ]]; then
     echo "#################################################"
     echo "Installing docker engine..."
@@ -184,11 +175,6 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
 
       # workaround "failed to load plugin io.containerd.internal.v1.opt  error="mkdir /opt/containerd: permission denied"
       mkdir /opt/containerd
-      chown act:act /opt/containerd
-
-      # set up subuid/subgid for act user
-      echo 'act:100000:65536' | tee -a /etc/subuid
-      echo 'act:100000:65536' | tee -a /etc/subgid
     else
       docker_version=$(docker --version | cut -d ' ' -f3 | cut -d ',' -f1)
       dind_hack_url="https://raw.githubusercontent.com/moby/moby/v${docker_version}/hack/dind"
@@ -205,7 +191,6 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
       echo "Downloading [$dind_hack_url]..."
       curl "$dind_hack_url" -o /usr/local/bin/dind-hack
       chmod +x /usr/local/bin/dind-hack
-      usermod -aG docker act
     fi
   fi
 
@@ -235,8 +220,8 @@ ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-latest,\
 ubuntu-24.04:docker://ghcr.io/catthehacker/ubuntu:act-24.04,\
 ubuntu-22.04:docker://ghcr.io/catthehacker/ubuntu:act-22.04,\
 ubuntu-20.04:docker://ghcr.io/catthehacker/ubuntu:act-20.04' \
-  GITEA_RUNNER_UID=1000 \
-  GITEA_RUNNER_GID=1000 \
+  GITEA_RUNNER_UID=0 \
+  GITEA_RUNNER_GID=0 \
   #
   GITEA_RUNNER_EPHEMERAL=false \
   GITEA_RUNNER_REGISTRATION_TIMEOUT=30 \
@@ -281,8 +266,6 @@ EOF
 COPY image/*.sh /opt/
 COPY image/config.template.yaml /opt/
 COPY .shared/lib/bash-init.sh /opt/bash-init.sh
-
-USER act
 
 VOLUME /data
 
