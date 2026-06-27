@@ -1,9 +1,0 @@
-*.md
-*.txt
-.actrc
-.dockerignore
-.editorconfig
-.gitattributes
-.gitignore
-.github/
-image/Dockerfile

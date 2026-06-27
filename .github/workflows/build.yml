@@ -70,7 +70,7 @@ jobs:
         # build the image
         echo "Building docker image [$image_name]..."
         docker build \
-          --file "image/Dockerfile" \
+          --file "gitea-act-runner/Dockerfile" \
           --progress=plain \
           --pull \
           --build-arg BASE_IMAGE="$DOCKER_BASE_IMAGE" \

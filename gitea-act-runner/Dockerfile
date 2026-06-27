@@ -160,8 +160,8 @@ ubuntu-20.04:docker://ghcr.io/catthehacker/ubuntu:act-20.04' \
   GITEA_RUNNER_REGISTRATION_TIMEOUT=30 \
   GITEA_RUNNER_REGISTRATION_RETRY_INTERVAL=5
 
-COPY image/*.sh /opt/
-COPY image/config.template.yaml /opt/
+COPY gitea-act-runner/*.sh /opt/
+COPY gitea-act-runner/config.template.yaml /opt/
 
 VOLUME /data
 
