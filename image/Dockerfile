@@ -26,8 +26,6 @@ SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 ARG INSTALL_SUPPORT_TOOLS=0
 ARG BASE_LAYER_CACHE_KEY
 
-ARG UPX_COMPRESS=false
-
 ARG GITEA_RUNNER_VERSION
 
 # https://github.com/hadolint/hadolint/wiki/DL3008 Pin versions
@@ -41,10 +39,6 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
     echo "Stripping [$*]..."
     command strip --strip-unneeded "$@"
     ls -l "$@"
-    if [[ $UPX_COMPRESS == "true" ]]; then
-      echo "Compressing [$*]..."
-      /opt/upx/upx -9 "$@" || true
-    fi
   }
 
   function curl() {
@@ -53,8 +47,7 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
 
   arch=$(dpkg --print-architecture)
   case "$arch" in
-    armhf)       upx_arch=arm;   gitea_arch=arm-7 ;;
-    amd64|arm64) upx_arch=$arch; gitea_arch=$arch ;;
+    amd64|arm64) gitea_arch=$arch ;;
     *) echo "Unsupported arch: $arch"; exit 1;;
   esac
 
@@ -62,24 +55,6 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
   echo "Installing required packages..."
   echo "#################################################"
   apt-get install --no-install-recommends -y adduser binutils ca-certificates curl sudo tini nodejs npm
-
-  if [[ $UPX_COMPRESS == "true" ]]; then
-    echo "#################################################"
-    echo "Downloading UPX..."
-    echo "#################################################"
-    apt-get install --no-install-recommends -y xz-utils
-    if [[ -f /run/secrets/github_token ]]; then
-       auth=(-H "Authorization: Bearer $(cat /run/secrets/github_token)")
-    fi
-    mkdir /opt/upx
-    upx_download_url=$(curl "${auth[@]:-}" "https://api.github.com/repos/upx/upx/releases/latest" | grep browser_download_url | grep "${upx_arch}_linux.tar.xz" | cut "-d\"" -f4)
-
-    echo "Downloading [$upx_download_url]..."
-    curl "$upx_download_url" | tar Jxv -C /opt/upx --strip-components=1
-    /opt/upx/upx --version
-
-    apt-get remove -y xz-utils
-  fi
 
   minimize /usr/bin/tini-static
 
@@ -177,7 +152,6 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
   echo "Cleanup..."
   echo "#################################################"
   apt-get remove -y binutils curl
-  rm -rf /opt/upx
   /mnt/shared/cmd/debian-cleanup.sh
 
 EOF
