@@ -2,11 +2,6 @@ name: Build
 
 on:
   workflow_dispatch:
-    inputs:
-      VERSION:
-        type: string
-        default: latest
-        description: Version of the Gitea Actions Runner, see https://dl.gitea.com/act_runner/
 
 
 defaults:
@@ -24,7 +19,6 @@ permissions:
   contents: read
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -34,7 +28,6 @@ jobs:
 
     env:
       TZ: Asia/Shanghai
-      GITEA_RUNNER_VERSION: latest
 
     steps:
     - name: Git Checkout
@@ -63,9 +56,6 @@ jobs:
         # DOCKER_SWR_NAMESPACE: gsc-hub
       run: |
         set -eu
-        if [[ -n "${{ inputs.VERSION }}" ]]; then
-          export GITEA_RUNNER_VERSION="${{ inputs.VERSION }}"
-        fi
         export IMAGE_TAG="$(date +'%Y%m%d_%H%M%S')-x86_64"
         echo "IMAGE_TAG=$IMAGE_TAG"
         bash build-image.sh

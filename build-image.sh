@@ -15,15 +15,11 @@ project_root="$(readlink -e "$(dirname "${BASH_SOURCE[0]}")")"
 #################################################
 function run_step() {
   local title=""
-  if [[ ${1:-} == "--" ]]; then
-    shift
-  else
+  while [[ ${1:-} != "--" ]]; do
     title="$1"
     shift
-    if [[ ${1:-} == "--" ]]; then
-      shift
-    fi
-  fi
+  done
+  shift  # remove "--"
   if [[ -n $title ]]; then
     echo ""
     echo "==========================================================="
@@ -34,32 +30,41 @@ function run_step() {
   "$@"
 }
 
+function push_to_registry() {
+  local target_prefix="$1"
+  for tag in "${tags[@]}"; do
+    local target="$target_prefix:$tag"
+    run_step "Tagging [$image_name] -> [$target]" -- docker tag "$image_name" "$target"
+    run_step "Pushing [$target]" -- docker push "$target"
+  done
+}
+
+
+#################################################
+# configuration
+#################################################
+image_repo=${DOCKER_IMAGE_REPO:-vegardit/gitea-act-runner}
+base_image=${DOCKER_BASE_IMAGE:-ubuntu:24.04}
+
+
+#################################################
+# resolve gitea act runner version (latest stable release)
+#################################################
+gitea_runner_effective_version=$(curl -sSf 'https://gitea.com/api/v1/repos/gitea/runner/releases?draft=false&pre-release=false&limit=1' | jq -r '.[0].tag_name | ltrimstr("v")')
+
 
 #################################################
 # declare image meta
 #################################################
-gitea_runner_version=${GITEA_RUNNER_VERSION:-latest}
-image_repo=${DOCKER_IMAGE_REPO:-vegardit/gitea-act-runner}
-base_image=${DOCKER_BASE_IMAGE:-ubuntu:24.04}
-
 declare -A image_meta=(
   [authors]="Vegard IT GmbH (vegardit.com)"
   [title]="$image_repo"
-  [description]="Docker image based on ubuntu:24.04 to run Gitea's action runner as a Docker container"
+  [description]="Docker image based on $base_image to run Gitea's action runner as a Docker container"
   [source]="$(git config --get remote.origin.url)"
   [revision]="$(git rev-parse --short HEAD)"
-  [version]="$(git rev-parse --short HEAD)"
+  [version]="$gitea_runner_effective_version"
   [created]="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 )
-
-
-#################################################
-# resolve gitea act runner version
-#################################################
-case $gitea_runner_version in
-  latest) gitea_runner_effective_version=$(curl -sSf 'https://gitea.com/api/v1/repos/gitea/runner/releases?draft=false&pre-release=false&limit=1' | jq -r '.[0].tag_name | ltrimstr("v")') ;;
-  *)      gitea_runner_effective_version=$gitea_runner_version ;;
-esac
 
 
 #################################################
@@ -69,7 +74,6 @@ declare -a tags=()
 if [[ -n ${IMAGE_TAG:-} ]]; then
   tags+=("$IMAGE_TAG")
 else
-  tags+=("${DOCKER_IMAGE_TAG_PREFIX:-}$gitea_runner_version")
   tags+=("${DOCKER_IMAGE_TAG_PREFIX:-}$gitea_runner_effective_version")
 fi
 
@@ -78,8 +82,6 @@ fi
 # prepare docker
 #################################################
 run_step -- docker version
-
-export DOCKER_BUILDKIT=1
 
 
 #################################################
@@ -115,30 +117,18 @@ run_step "Building docker image [$image_name]..." -- \
 run_step "Testing docker image [$image_name]" -- \
   docker run --pull=never --rm "$image_name" gitea-runner --version
 
+run_step "Listing docker images" -- docker images
+
 
 #################################################
 # push image
 #################################################
-if [[ ${DOCKER_PUSH:-} == "true" ]]; then
-  for tag in "${tags[@]}"; do
-    run_step "Tagging [$image_name] -> [$image_repo:$tag]" -- docker tag "$image_name" "$image_repo:$tag"
-    run_step "Pushing [docker.io/$image_repo:$tag]" -- docker push "$image_repo:$tag"
-  done
-fi
 if [[ ${DOCKER_PUSH_GHCR:-} == "true" ]]; then
-  for tag in "${tags[@]}"; do
-    ghcr_image="ghcr.io/$image_repo:$tag"
-    run_step "Tagging [$image_name] -> [$ghcr_image]" -- docker tag "$image_name" "$ghcr_image"
-    run_step "Pushing [$ghcr_image]" -- docker push "$ghcr_image"
-  done
+  push_to_registry "ghcr.io/$image_repo"
 fi
 if [[ ${DOCKER_PUSH_SWR:-} == "true" ]]; then
-  swr_registry=${DOCKER_SWR_REGISTRY:-swr.cn-southwest-2.myhuaweicloud.com}
+  swr_registry=${DOCKER_SWR_REGISTRY:-swr.cn-south-west-2.myhuaweicloud.com}
   swr_namespace=${DOCKER_SWR_NAMESPACE:-gsc-hub}
   swr_image_name="${image_repo##*/}"
-  for tag in "${tags[@]}"; do
-    swr_image="$swr_registry/$swr_namespace/$swr_image_name:$tag"
-    run_step "Tagging [$image_name] -> [$swr_image]" -- docker tag "$image_name" "$swr_image"
-    run_step "Pushing [$swr_image]" -- docker push "$swr_image"
-  done
+  push_to_registry "$swr_registry/$swr_namespace/$swr_image_name"
 fi
