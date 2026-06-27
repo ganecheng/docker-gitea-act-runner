@@ -63,7 +63,7 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
   echo "#################################################"
   echo "Installing required packages..."
   echo "#################################################"
-  apt-get install --no-install-recommends -y adduser binutils ca-certificates curl sudo tini
+  apt-get install --no-install-recommends -y adduser binutils ca-certificates curl sudo tini nodejs npm
 
   if [[ $UPX_COMPRESS == "true" ]]; then
     echo "#################################################"
