@@ -125,7 +125,6 @@ done
 
 if [[ ${build_multi_arch:-} == "true" ]]; then
   build_opts+=(--platform "$platforms")
-  build_opts+=(--sbom=true)  # https://docs.docker.com/build/metadata/attestations/sbom/#create-sbom-attestations
   build_opts+=(--output "type=registry,name=${LOCAL_REGISTRY}/${image_name},registry.http=true,registry.insecure=true")
 else
   build_opts+=(--output "type=docker,load=true")
