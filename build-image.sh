@@ -16,14 +16,14 @@ source "$shared_lib/lib/build-image-init.sh"
 #################################################
 gitea_runner_version=${GITEA_RUNNER_VERSION:-latest}
 image_repo=${DOCKER_IMAGE_REPO:-vegardit/gitea-act-runner}
-base_image=${DOCKER_BASE_IMAGE:-debian:stable-slim}
+base_image=${DOCKER_BASE_IMAGE:-ubuntu:24.04}
 
 platforms="linux/amd64,linux/arm64/v8,linux/arm/v7"
 
 declare -A image_meta=(
   [authors]="Vegard IT GmbH (vegardit.com)"
   [title]="$image_repo"
-  [description]="Docker image based on debian:stable-slim to run Gitea's action runner as a Docker container"
+  [description]="Docker image based on ubuntu:24.04 to run Gitea's action runner as a Docker container"
   [source]="$(git config --get remote.origin.url)"
   [revision]="$(git rev-parse --short HEAD)"
   [version]="$(git rev-parse --short HEAD)"

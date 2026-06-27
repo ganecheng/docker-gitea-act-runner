@@ -13,7 +13,7 @@
 
 ## <a name="what-is-it"></a>What is it?
 
-Multi-arch Docker image based on `debian:stable-slim` containing [Gitea](https://gitea.com)'s [Action Runner](https://gitea.com/gitea/runner/)
+Multi-arch Docker image based on `ubuntu:24.04` containing [Gitea](https://gitea.com)'s [Action Runner](https://gitea.com/gitea/runner/)
 
 #### Why not using Alpine Linux?
 - musl-libc - Alpine's Greatest Weakness https://www.linkedin.com/pulse/musl-libc-alpines-greatest-weakness-rogan-lynch

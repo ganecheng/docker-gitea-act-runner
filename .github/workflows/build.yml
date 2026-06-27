@@ -7,40 +7,13 @@
 name: Build
 
 on:  # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
-  schedule:
-    # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
-    - cron: '0 17 * * 3'
-  push:
-    branches-ignore:  # build all branches except:
-    - 'dependabot/**'  # prevent GHA triggered twice (once for commit to the branch and once for opening/syncing the PR)
-    tags-ignore:  # don't build tags
-    - '**'
-    paths-ignore:
-    - '**/*.adoc'
-    - '**/*.md'
-    - '.act*'
-    - '.editorconfig'
-    - '.git*'
-    - '.github/*.yml'
-    - '.github/ISSUE_TEMPLATE/*'
-    - '.github/workflows/stale.yml'
-  pull_request:
-    paths-ignore:
-    - '**/*.adoc'
-    - '**/*.md'
-    - '.act*'
-    - '.editorconfig'
-    - '.git*'
-    - '.github/*.yml'
-    - '.github/ISSUE_TEMPLATE/*'
-    - '.github/workflows/stale.yml'
   workflow_dispatch:
     # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch
     inputs:
       VERSION:
         type: string
         default: latest
-        description: Version of the Gitea Actions Runner, see https://dl.gitea.com/act_runner/ 
+        description: Version of the Gitea Actions Runner, see https://dl.gitea.com/act_runner/
 
 
 defaults:
@@ -68,28 +41,10 @@ jobs:
     permissions:
       packages: write
 
-    strategy:
-      matrix:
-        include:
-          - DOCKER_IMAGE_FLAVOR: dood
-            DOCKER_IMAGE_TAG_PREFIX: ""
-            GITEA_RUNNER_VERSION: latest
-          - DOCKER_IMAGE_FLAVOR: dind
-            DOCKER_IMAGE_TAG_PREFIX: dind-
-            GITEA_RUNNER_VERSION: latest
-          - DOCKER_IMAGE_FLAVOR: dind-rootless
-            DOCKER_IMAGE_TAG_PREFIX: dind-rootless-
-            GITEA_RUNNER_VERSION: latest
-          - DOCKER_IMAGE_FLAVOR: dood
-            DOCKER_IMAGE_TAG_PREFIX: ""
-            GITEA_RUNNER_VERSION: nightly
-          - DOCKER_IMAGE_FLAVOR: dind
-            DOCKER_IMAGE_TAG_PREFIX: dind-
-            GITEA_RUNNER_VERSION: nightly
-          - DOCKER_IMAGE_FLAVOR: dind-rootless
-            DOCKER_IMAGE_TAG_PREFIX: dind-rootless-
-            GITEA_RUNNER_VERSION: nightly
-      fail-fast: true
+    env:
+      DOCKER_IMAGE_FLAVOR: dind
+      DOCKER_IMAGE_TAG_PREFIX: dind-
+      GITEA_RUNNER_VERSION: latest
 
     steps:
     - name: Harden the runner (Audit all outbound calls)
@@ -183,18 +138,14 @@ jobs:
 
     - name: Build ${{ env.DOCKER_REPO_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
       env:
-        DOCKER_BASE_IMAGE: ghcr.io/dockerhub-mirror/debian:stable-slim
+        DOCKER_BASE_IMAGE: ghcr.io/dockerhub-mirror/ubuntu:24.04
         DOCKER_IMAGE_REPO: ${{ github.repository_owner }}/${{ env.DOCKER_REPO_NAME }}
-        DOCKER_IMAGE_TAG_PREFIX: ${{ matrix.DOCKER_IMAGE_TAG_PREFIX }}
-        DOCKER_IMAGE_FLAVOR: ${{ matrix.DOCKER_IMAGE_FLAVOR }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         TRIVY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         set -eu
         if [[ -n "${{ inputs.VERSION }}" ]]; then
           export GITEA_RUNNER_VERSION="${{ inputs.VERSION }}"
-        else
-          export GITEA_RUNNER_VERSION="${{ matrix.GITEA_RUNNER_VERSION }}"
         fi
         bash build-image.sh
 

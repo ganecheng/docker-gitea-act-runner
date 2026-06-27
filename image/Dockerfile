@@ -7,8 +7,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-ArtifactOfProjectHomePage: https://github.com/vegardit/docker-gitea-act-runner
 
-# https://hub.docker.com/_/debian/tags?name=stable-slim
-ARG BASE_IMAGE=debian:stable-slim
+# https://hub.docker.com/_/ubuntu/tags?name=24.04
+ARG BASE_IMAGE=ubuntu:24.04
 
 #############################################################
 # build final image
@@ -124,16 +124,16 @@ RUN --mount=type=secret,id=github_token,required=false --mount=type=bind,source=
     echo "#################################################"
     # git needed by buildx
     apt-get install --no-install-recommends -y git
-    # https://docs.docker.com/engine/install/debian/#install-using-the-repository
+    # https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
     apt-get install --no-install-recommends -y gnupg
     install -m 0755 -d /etc/apt/keyrings
-    curl "https://download.docker.com/linux/debian/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    curl "https://download.docker.com/linux/ubuntu/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     chmod a+r /etc/apt/keyrings/docker.gpg
 
     ARCH="$(dpkg --print-architecture)"
     # shellcheck disable=SC1091 # Not following: File not included in mock
     OS_CODENAME="$(source /etc/os-release && echo "$VERSION_CODENAME")"
-    echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $OS_CODENAME stable" > /etc/apt/sources.list.d/docker.list
+    echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $OS_CODENAME stable" > /etc/apt/sources.list.d/docker.list
     apt-get update
     (set -x; apt-get install --no-install-recommends -y docker-ce docker-buildx-plugin docker-compose-plugin containerd.io fuse-overlayfs)
     apt-get remove -y gnupg
