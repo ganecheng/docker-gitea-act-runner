@@ -34,7 +34,7 @@ function push_to_registry() {
   local target_prefix="$1"
   for tag in "${tags[@]}"; do
     local target="$target_prefix:$tag"
-    docker history "$target"
+    docker history "$image_name"
     run_step "Tagging [$image_name] -> [$target]" -- docker tag "$image_name" "$target"
     run_step "Pushing [$target]" -- docker push "$target"
   done
